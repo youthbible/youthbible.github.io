@@ -37,8 +37,6 @@
         <li>화면 오른쪽 아래(또는 위)의 <b>⋯</b> 또는 <b>공유</b> 버튼을 누릅니다.</li>
         <li><b>Safari로 열기</b> 또는 <b>다른 브라우저로 열기</b>를 고릅니다.</li>
       </ol>
-      <button class="btn line" onclick="copyLink()">주소 복사</button>
-      <p class="muted hidden" id="copied" style="margin-top:12px">복사했습니다. 기본 브라우저 주소창에 붙여넣어 주세요.</p>
       <button class="btn line" onclick="showLogin()">그래도 여기서 계속하기</button>
     </div>
 
@@ -65,9 +63,31 @@
       document.getElementById('title').textContent = PAGES[next] || '';
       document.title = (PAGES[next] || '예약') + ' | 로그인';
 
+      // 로그인 유지: 처음 Google 로그인 때 웹앱에서 받은 토큰(30일)을 이 브라우저에 두고, 다음부터는 바로 이동한다.
+      // forget=1: 계정 바꾸기 또는 웹앱이 토큰을 거절했을 때 → 지우고 Google 로그인부터
+      const KEEP_KEY = 'rsv_keep_login';
+      const forget = params.get('forget') === '1';
+      function readKeep() {
+        try { return JSON.parse(localStorage.getItem(KEEP_KEY) || 'null'); } catch (e) { return null; }
+      }
+      function writeKeep(v) {
+        try { if (v) localStorage.setItem(KEEP_KEY, JSON.stringify(v)); else localStorage.removeItem(KEEP_KEY); } catch (e) {}
+      }
+      function appUrl(extra) {
+        return MAIN_APP_URL + '?page=' + next + (rid ? '&rid=' + rid : '') + extra;
+      }
+      if (forget) writeKeep(null);
+      const keep = next && !forget ? readKeep() : null;
+      const keepOk = Boolean(keep && keep.token && keep.exp > Date.now() + 60 * 1000);
+      if (keepOk) {
+        document.getElementById('gbtn').classList.add('hidden');
+        document.getElementById('moving').classList.remove('hidden');
+        location.replace(appUrl('&st=' + encodeURIComponent(keep.token)));
+      }
+
       const ua = navigator.userAgent || '';
       const inApp = /KAKAOTALK|Instagram|FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|BAND\//i.test(ua);
-      if (inApp) {
+      if (inApp && !keepOk) {
         document.getElementById('login').classList.add('hidden');
         document.getElementById('inapp').classList.remove('hidden');
         if (/KAKAOTALK/i.test(ua) && /Android/i.test(ua)) {
@@ -86,41 +106,33 @@
 
       function onCredential(res) {
         document.getElementById('moving').classList.remove('hidden');
-        location.href = MAIN_APP_URL + '?page=' + next + (rid ? '&rid=' + rid : '') + '&idt=' + encodeURIComponent(res.credential);
+        const idt = encodeURIComponent(res.credential);
+        // 로그인 유지 토큰을 받아 저장한 뒤 이동. 못 받으면(네트워크 등) 예전처럼 이번 한 번만 로그인해서 이동한다.
+        fetch(MAIN_APP_URL + '?api=login&idt=' + idt)
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok || !d.token) throw new Error(d.message || 'no token');
+            writeKeep({ token: d.token, exp: d.exp });
+            location.href = appUrl('&st=' + encodeURIComponent(d.token));
+          })
+          .catch(function () { location.href = appUrl('&idt=' + idt); });
       }
 
       window.onload = function () {
-        if (!next) return;
+        if (!next || keepOk) return;
         if (!window.google || !google.accounts) {
           const e = document.getElementById('error');
           e.textContent = 'Google 로그인을 불러오지 못했습니다. 새로고침해 주세요.';
           e.classList.remove('hidden');
           return;
         }
-        google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, ux_mode: 'popup' });
+        // auto_select: 전에 로그인한 계정이 하나뿐이면 버튼을 누르지 않아도 자동 로그인 (계정 바꾸기 때는 끔)
+        google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, ux_mode: 'popup', auto_select: !forget });
         google.accounts.id.renderButton(document.getElementById('gbtn'),
           { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: 'ko', width: 280 });
         if (!inApp) google.accounts.id.prompt();
       };
 
-      function copyLink() {
-        const url = location.href;
-        const done = function () { document.getElementById('copied').classList.remove('hidden'); };
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(url).then(done, fallback);
-        } else {
-          fallback();
-        }
-        function fallback() {
-          const t = document.createElement('textarea');
-          t.value = url;
-          document.body.appendChild(t);
-          t.select();
-          document.execCommand('copy');
-          document.body.removeChild(t);
-          done();
-        }
-      }
     </script>
   </body>
 </html>
