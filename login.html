@@ -15,17 +15,27 @@
              color: #fff; text-decoration: none; border-radius: 8px; font-size: 17px; border: 0; font-family: inherit; }
       .btn.line { background: #fff; color: #2e7d32; border: 1px solid #2e7d32; margin-top: 8px; }
       #gbtn { display: flex; justify-content: center; min-height: 44px; }
-      .hidden { display: none; }
+      .hidden { display: none !important; }  /* #gbtn { display:flex }보다 우선해야 로그인 버튼이 실제로 숨는다 */
       ol { text-align: left; padding-left: 20px; }
       .err { color: #c62828; }
+      /* 이동 중 화면: 로그인 버튼 대신 보인다 (다시 누를 수 없게) */
+      .spinner { width: 40px; height: 40px; border: 4px solid #c8e6c9; border-top-color: #2e7d32; border-radius: 50%;
+                 animation: spin 1s linear infinite; margin: 8px auto 14px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      #moving b { display: block; font-size: 17px; color: #1b5e20; margin-bottom: 6px; }
     </style>
   </head>
   <body>
     <div class="card" id="login">
       <h1 id="title">로그인</h1>
-      <p class="muted">신청자 확인을 위해 Google 계정으로 로그인해 주세요.<br>받는 정보는 이메일 주소뿐입니다.</p>
+      <p class="muted" id="intro">신청자 확인을 위해 Google 계정으로 로그인해 주세요.<br>받는 정보는 이메일 주소뿐입니다.</p>
       <div id="gbtn"></div>
-      <p class="muted hidden" id="moving" style="margin-top:20px">신청 화면으로 이동하고 있습니다...</p>
+      <div class="hidden" id="moving">
+        <div class="spinner"></div>
+        <b>신청 화면으로 이동하고 있습니다</b>
+        <p class="muted">로그인은 끝났습니다. 화면이 바뀔 때까지 몇 초 걸립니다.<br>다른 곳을 누르지 말고 기다려 주세요.</p>
+        <button class="btn line hidden" id="retryBtn" onclick="retry()">화면이 안 바뀌면 다시 시도</button>
+      </div>
       <p class="err hidden" id="error" style="margin-top:20px"></p>
     </div>
 
@@ -77,13 +87,29 @@
         return MAIN_APP_URL + '?page=' + next + (rid ? '&rid=' + rid : '') + extra;
       }
       if (forget) writeKeep(null);
+
+      // 이동 중: 로그인 버튼을 바로 숨기고 로딩 표시. 로그인 버튼을 다시 누르면 두 번째 로그인 창이 열리고
+      // 첫 이동이 끊겨 흰 화면만 남았다. 이 페이지는 방문 기록에 남기지 않는다(replace) → 뒤로 가기로 멈춘 화면에 오지 않음.
+      // 오래(15초) 안 바뀌면 '다시 시도' 버튼. 로그인 유지 토큰을 이미 받았으면 Google 로그인 없이 바로 다시 이동한다.
+      let moving = false;
+      function go(url) {
+        moving = true;
+        ['gbtn', 'intro', 'error'].forEach(function (id) { document.getElementById(id).classList.add('hidden'); });
+        document.getElementById('moving').classList.remove('hidden');
+        try { if (window.google && google.accounts) google.accounts.id.cancel(); } catch (e) {}
+        setTimeout(function () { document.getElementById('retryBtn').classList.remove('hidden'); }, 15000);
+        if (url) location.replace(url);
+      }
+      function retry() {
+        document.getElementById('retryBtn').disabled = true;
+        location.reload();
+      }
+      // 뒤로·앞으로 가기로 예전 화면이 그대로 돌아오면(bfcache) 새로 연다.
+      window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
       const keep = next && !forget ? readKeep() : null;
       const keepOk = Boolean(keep && keep.token && keep.exp > Date.now() + 60 * 1000);
-      if (keepOk) {
-        document.getElementById('gbtn').classList.add('hidden');
-        document.getElementById('moving').classList.remove('hidden');
-        location.replace(appUrl('&st=' + encodeURIComponent(keep.token)));
-      }
+      if (keepOk) go(appUrl('&st=' + encodeURIComponent(keep.token)));
 
       const ua = navigator.userAgent || '';
       const inApp = /KAKAOTALK|Instagram|FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|BAND\//i.test(ua);
@@ -105,7 +131,8 @@
       }
 
       function onCredential(res) {
-        document.getElementById('moving').classList.remove('hidden');
+        if (moving) return;  // 이미 이동 중이면 두 번째 로그인은 무시
+        go('');
         const idt = encodeURIComponent(res.credential);
         // 로그인 유지 토큰을 받아 저장한 뒤 이동. 못 받으면(네트워크 등) 예전처럼 이번 한 번만 로그인해서 이동한다.
         fetch(MAIN_APP_URL + '?api=login&idt=' + idt)
@@ -113,9 +140,9 @@
           .then(function (d) {
             if (!d.ok || !d.token) throw new Error(d.message || 'no token');
             writeKeep({ token: d.token, exp: d.exp });
-            location.href = appUrl('&st=' + encodeURIComponent(d.token));
+            location.replace(appUrl('&st=' + encodeURIComponent(d.token)));
           })
-          .catch(function () { location.href = appUrl('&idt=' + idt); });
+          .catch(function () { location.replace(appUrl('&idt=' + idt)); });
       }
 
       window.onload = function () {
