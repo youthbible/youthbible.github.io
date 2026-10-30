@@ -48,7 +48,6 @@
       // 예약시스템 웹앱 (…-varA 배포)
       const MAIN_APP_URL = 'https://script.google.com/macros/s/AKfycbyiACYNNv3813hpDWnUH77MuwaQTmP12I6cfkzWPyDmsEaqHxFAU4Avh6ui4BpJd-varA/exec';
       const PAGES = {
-        identity: '계정 인식 테스트',
         dept: '센터부서 & 연수봉사 대관 신청',
         study: '센터 그룹공부 대관 신청',
         vehicle: '차량 출입 등록 신청',
@@ -56,10 +55,15 @@
         admin: '관리자 페이지',
       };
 
+      // 신청 첫 화면 (next가 없거나 틀린 주소면 여기로 보낸다)
+      const SITE_URL = 'https://sites.google.com/view/youthbible-rsv/home';
       const params = new URLSearchParams(location.search);
-      const next = PAGES[params.get('next')] ? params.get('next') : 'identity';
-      document.getElementById('title').textContent = PAGES[next];
-      document.title = PAGES[next] + ' | 로그인';
+      const next = Object.prototype.hasOwnProperty.call(PAGES, params.get('next')) ? params.get('next') : '';
+      if (!next) location.replace(SITE_URL);
+      // 관리자 화면에서 신청 한 건만 볼 때 (텔레그램 알림 링크). 신청ID 모양만 넘긴다.
+      const rid = next === 'admin' && /^[DSVE]-\d{8}-\d{3}$/.test(params.get('rid') || '') ? params.get('rid') : '';
+      document.getElementById('title').textContent = PAGES[next] || '';
+      document.title = (PAGES[next] || '예약') + ' | 로그인';
 
       const ua = navigator.userAgent || '';
       const inApp = /KAKAOTALK|Instagram|FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|BAND\//i.test(ua);
@@ -82,10 +86,11 @@
 
       function onCredential(res) {
         document.getElementById('moving').classList.remove('hidden');
-        location.href = MAIN_APP_URL + '?page=' + next + '&idt=' + encodeURIComponent(res.credential);
+        location.href = MAIN_APP_URL + '?page=' + next + (rid ? '&rid=' + rid : '') + '&idt=' + encodeURIComponent(res.credential);
       }
 
       window.onload = function () {
+        if (!next) return;
         if (!window.google || !google.accounts) {
           const e = document.getElementById('error');
           e.textContent = 'Google 로그인을 불러오지 못했습니다. 새로고침해 주세요.';
