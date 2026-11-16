@@ -61,13 +61,15 @@
         external: '외부 단체 예약 신청',
         admin: '관리자 페이지',
         my: '내 신청',
-        accounts: '등록 계정',
       };
+      // 옮긴 화면의 옛 주소·즐겨찾기 → 새 자리 (등록 계정 = 관리자 화면 '등록 계정' 탭)
+      const MOVED = { accounts: { page: 'admin', extra: '&tab=ACC' } };
 
       // 신청 첫 화면 (next가 없거나 틀린 주소면 여기로 보낸다)
       const SITE_URL = 'https://sites.google.com/view/youthbible-rsv/home';
       const params = new URLSearchParams(location.search);
-      const next = Object.prototype.hasOwnProperty.call(PAGES, params.get('next')) ? params.get('next') : '';
+      const moved = Object.prototype.hasOwnProperty.call(MOVED, params.get('next')) ? MOVED[params.get('next')] : null;
+      const next = moved ? moved.page : Object.prototype.hasOwnProperty.call(PAGES, params.get('next')) ? params.get('next') : '';
       if (!next) location.replace(SITE_URL);
       // 관리자 화면에서 신청 한 건만 볼 때 (텔레그램 알림 링크). 신청ID 모양만 넘긴다.
       const rid = next === 'admin' && /^[DSVE]-\d{8}-\d{3}$/.test(params.get('rid') || '') ? params.get('rid') : '';
@@ -85,7 +87,7 @@
         try { if (v) localStorage.setItem(KEEP_KEY, JSON.stringify(v)); else localStorage.removeItem(KEEP_KEY); } catch (e) {}
       }
       function appUrl(extra) {
-        return MAIN_APP_URL + '?page=' + next + (rid ? '&rid=' + rid : '') + extra;
+        return MAIN_APP_URL + '?page=' + next + (rid ? '&rid=' + rid : '') + (moved ? moved.extra : '') + extra;
       }
       if (forget) writeKeep(null);
 
