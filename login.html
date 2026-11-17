@@ -28,7 +28,6 @@
   <body>
     <div class="card" id="login">
       <h1 id="title">로그인</h1>
-      <p class="muted" id="intro">신청자 확인을 위해 Google 계정으로 로그인해 주세요.</p>
       <div id="gbtn"></div>
       <div class="hidden" id="moving">
         <div class="spinner"></div>
@@ -97,7 +96,7 @@
       let moving = false;
       function go(url) {
         moving = true;
-        ['gbtn', 'intro', 'error'].forEach(function (id) { document.getElementById(id).classList.add('hidden'); });
+        ['gbtn', 'error'].forEach(function (id) { document.getElementById(id).classList.add('hidden'); });
         document.getElementById('moving').classList.remove('hidden');
         try { if (window.google && google.accounts) google.accounts.id.cancel(); } catch (e) {}
         setTimeout(function () { document.getElementById('retryBtn').classList.remove('hidden'); }, 15000);
